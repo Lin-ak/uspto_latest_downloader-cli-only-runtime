@@ -63,6 +63,8 @@ def get_sync_audit_snapshot(owner: Any) -> dict[str, Any]:
             owner._initialize_db_unlocked(connection)
             snapshot = build_sync_audit_snapshot_unlocked(owner, connection)
             connection.commit()
+            if hasattr(owner, "_secure_runtime_artifacts"):
+                owner._secure_runtime_artifacts()
             return snapshot
 
 

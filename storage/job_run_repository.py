@@ -212,6 +212,8 @@ def create_job_run(
                 status=status,
             )
             connection.commit()
+            if hasattr(owner, "_secure_runtime_artifacts"):
+                owner._secure_runtime_artifacts()
             return job_run_id
 
 
@@ -246,6 +248,8 @@ def finalize_job_run(
                 error=error,
             )
             connection.commit()
+            if hasattr(owner, "_secure_runtime_artifacts"):
+                owner._secure_runtime_artifacts()
 
 
 def list_job_runs(owner: Any, limit: int = 20, offset: int = 0) -> dict[str, Any]:
@@ -264,6 +268,8 @@ def list_job_runs(owner: Any, limit: int = 20, offset: int = 0) -> dict[str, Any
                 (limit, offset),
             ).fetchall()
             connection.commit()
+            if hasattr(owner, "_secure_runtime_artifacts"):
+                owner._secure_runtime_artifacts()
 
     job_runs = [deserialize_job_run_row(owner, row) for row in rows]
     return {

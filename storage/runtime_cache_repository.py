@@ -81,6 +81,8 @@ def load_runtime_cache(owner: Any, cache_key: str) -> dict[str, Any] | None:
             owner._initialize_db_unlocked(connection)
             value = read_runtime_cache_unlocked(owner, connection, cache_key=cache_key)
             connection.commit()
+            if hasattr(owner, "_secure_runtime_artifacts"):
+                owner._secure_runtime_artifacts()
             return value
 
 
@@ -103,6 +105,8 @@ def write_runtime_cache(
                 expires_at=expires_at,
             )
             connection.commit()
+            if hasattr(owner, "_secure_runtime_artifacts"):
+                owner._secure_runtime_artifacts()
 
 
 def delete_runtime_cache(owner: Any, cache_key: str) -> None:
@@ -112,6 +116,8 @@ def delete_runtime_cache(owner: Any, cache_key: str) -> None:
             owner._initialize_db_unlocked(connection)
             delete_runtime_cache_unlocked(owner, connection, cache_key=cache_key)
             connection.commit()
+            if hasattr(owner, "_secure_runtime_artifacts"):
+                owner._secure_runtime_artifacts()
 
 
 def get_failure_cooldown_snapshot(owner: Any) -> dict[str, Any]:

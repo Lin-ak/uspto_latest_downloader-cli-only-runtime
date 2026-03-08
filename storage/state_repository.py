@@ -160,6 +160,8 @@ def load_state(owner: Any) -> dict[str, Any]:
             if state is None:
                 state = write_state_to_db_unlocked(owner, connection, owner.default_state())
             connection.commit()
+            if hasattr(owner, "_secure_runtime_artifacts"):
+                owner._secure_runtime_artifacts()
             return state
 
 
@@ -170,6 +172,8 @@ def write_state(owner: Any, state: dict[str, Any]) -> dict[str, Any]:
             owner._initialize_db_unlocked(connection)
             normalized = write_state_to_db_unlocked(owner, connection, state)
             connection.commit()
+            if hasattr(owner, "_secure_runtime_artifacts"):
+                owner._secure_runtime_artifacts()
             return normalized
 
 

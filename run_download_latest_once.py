@@ -7,7 +7,7 @@ import json
 import logging
 import sys
 
-from core.common import error_hint_for_code
+from core.common import PUBLIC_ERROR_MESSAGES, error_hint_for_code
 from core.contract import (
     SYNC_LATEST_FILE_OPERATION,
     SYNC_LATEST_FILE_RESOURCE,
@@ -109,6 +109,7 @@ def main() -> int:
         sys.stdout.write(f"{payload}\n")
         return 1
     except Exception as exc:  # noqa: BLE001
+        logger.exception("download_cli_unexpected_error")
         log_event(
             logger,
             logging.ERROR,
@@ -119,7 +120,7 @@ def main() -> int:
         payload = json.dumps(
             error_payload(
                 "internal_error",
-                f"服务器异常: {exc}",
+                PUBLIC_ERROR_MESSAGES["internal_error"],
                 hint=error_hint_for_code("internal_error"),
                 details={
                     "operation": SYNC_LATEST_FILE_OPERATION,

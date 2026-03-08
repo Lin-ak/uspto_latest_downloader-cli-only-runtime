@@ -38,10 +38,13 @@ set +a
 
 - 相对路径会以 `USPTO_ROOT_DIR` 为基准；如果未设置 `USPTO_ROOT_DIR`，则以当前项目根目录为基准
 - 如果三个变量都不设置，行为与当前默认值一致
+- `USPTO_COOKIE_CACHE_TTL_SECONDS` 默认值为 `0`，即默认不把第三方 cookie 持久化到 `runtime/app.db`
+- 如果显式设置 `USPTO_COOKIE_CACHE_TTL_SECONDS > 0`，会把 USPTO 会话 cookie 写入 `runtime/app.db`；这种模式只适合单用户、受信任主机
 
 常用入口：
 
 ```bash
+make test
 make pycompile
 make run
 ```
@@ -53,6 +56,23 @@ make run
 - `python3 run_download_latest_once.py`
 
 常规定时同步请固定使用 CLI 入口。
+
+## 上线前校验
+
+建议至少执行：
+
+```bash
+make test
+./.venv/bin/python -c "from playwright.sync_api import sync_playwright; print('playwright-ok')"
+./.venv/bin/playwright install chromium
+./.venv/bin/python run_download_latest_once.py
+```
+
+如果需要做依赖漏洞扫描：
+
+```bash
+./.venv/bin/pip-audit -r requirements.txt
+```
 
 ## 定时同步
 
@@ -136,7 +156,7 @@ sudo systemctl status uspto-latest-downloader.timer
 ## 运行策略
 
 - 下载任务会对浏览器会话、官方元数据和 ZIP 下载做有限次重试与退避
-- 浏览器拿到的上游 cookie 会做短期缓存；默认缓存 900 秒，可用 `USPTO_COOKIE_CACHE_TTL_SECONDS=0` 关闭
+- 浏览器拿到的上游 cookie 默认不持久化；只有当 `USPTO_COOKIE_CACHE_TTL_SECONDS > 0` 时才会写入 `runtime/app.db`
 - 重试退避默认带随机抖动，避免固定节奏命中风控；抖动比例可用 `USPTO_RETRY_JITTER_RATIO` 调整
 - 连续失败后会进入短期冷却窗口，避免持续撞击 USPTO；冷却秒数可用 `USPTO_FAILURE_COOLDOWN_SECONDS` 调整，设为 `0` 可关闭
 - 上游 `fileDownloadURI` 会做 `https://data.uspto.gov/...` allowlist 校验
@@ -144,6 +164,7 @@ sudo systemctl status uspto-latest-downloader.timer
 - 最新文件解析路径只做轻量 ZIP 可读性校验，不再对历史 ZIP 重复全量 `testzip()`
 - 运行日志统一走结构化 JSON logging，输出到 `stderr`
 - CLI 每次执行都会基于 SQLite 和磁盘状态继续同步流程；如有需要，可调用 `repair_download_history_from_disk()` 做历史回补
+- 运行时会主动把 `runtime/` 收紧到 `0700`，并把 `runtime/app.db`、其 `-wal/-shm` 文件和 `.download.lock` 收紧到 `0600`
 
 ## 包结构说明
 

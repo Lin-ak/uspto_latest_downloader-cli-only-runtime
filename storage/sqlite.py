@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from core.common import PUBLIC_ERROR_MESSAGES, DownloadError, error_hint_for_code, iso_now
+from core.runtime_security import secure_runtime_artifacts
 from storage import job_run_repository
 from storage import runtime_cache_repository
 from storage import sqlite_connection
@@ -24,6 +25,7 @@ class DownloaderStorageMixin:
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
         self.partial_dir.mkdir(parents=True, exist_ok=True)
         self.runtime_dir.mkdir(parents=True, exist_ok=True)
+        self._secure_runtime_artifacts()
 
     def default_state(self) -> dict[str, Any]:
         return {
@@ -38,6 +40,14 @@ class DownloaderStorageMixin:
 
     def _connect_db_unlocked(self):
         return sqlite_connection.connect_db_unlocked(self)
+
+    def _secure_runtime_artifacts(self) -> None:
+        secure_runtime_artifacts(
+            runtime_dir=self.runtime_dir,
+            db_path=self.db_path,
+            lock_path=getattr(self, "lock_path", None),
+            state_path=getattr(self, "state_path", None),
+        )
 
     def _initialize_db_unlocked(self, connection) -> None:
         sqlite_connection.initialize_db_unlocked(self, connection)

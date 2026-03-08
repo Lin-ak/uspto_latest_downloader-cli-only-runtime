@@ -12,6 +12,8 @@ def connect_db_unlocked(owner: Any) -> sqlite3.Connection:
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA journal_mode=WAL")
     connection.execute("PRAGMA synchronous=NORMAL")
+    if hasattr(owner, "_secure_runtime_artifacts"):
+        owner._secure_runtime_artifacts()
     return connection
 
 

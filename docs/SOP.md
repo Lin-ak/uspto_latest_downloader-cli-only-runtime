@@ -40,6 +40,12 @@ cp .env.example .env
 
 相对路径默认以 `USPTO_ROOT_DIR` 为基准；未设置时以项目根目录为基准。
 
+Cookie 缓存说明：
+
+- 默认 `USPTO_COOKIE_CACHE_TTL_SECONDS=0`，不上盘第三方 cookie
+- 只有显式设置为大于 `0` 时，才会把 USPTO 会话 cookie 写入 `runtime/app.db`
+- 这种模式只适合单用户、受信任主机
+
 ## 4. 启动与停止
 
 启动：
@@ -59,6 +65,7 @@ make run
 校验：
 
 ```bash
+make test
 make pycompile
 ```
 
@@ -74,7 +81,7 @@ make pycompile
 
 1. 抢跨进程锁，避免并发同步
 2. 读取或复用缓存 cookie
-3. 必要时启动 headless Chromium 获取 cookie
+3. 默认直接启动 headless Chromium 获取 cookie；只有开启 cookie TTL 时才会跨进程复用
 4. 请求 USPTO 元数据
 5. 选出最新 ZIP
 6. 判断本地是否已有有效文件
@@ -88,6 +95,7 @@ make pycompile
 1. `stderr` 结构化日志
 2. `runtime/app.db`
 3. `downloads/`
+4. `make test`
 
 SQLite 常看表：
 
@@ -102,6 +110,7 @@ SQLite 常看表：
 - `runtime/app.db`
 
 建议定期备份这两类数据。
+运行时会主动把 `runtime/` 收紧到 `0700`，并把 `runtime/app.db`、其 `-wal/-shm` 文件和 `.download.lock` 收紧到 `0600`。
 
 ## 8. 变更原则
 

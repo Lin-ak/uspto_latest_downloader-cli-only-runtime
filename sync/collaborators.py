@@ -193,6 +193,8 @@ class RunLock:
             )
         )
         lock_file.flush()
+        if os.name != "nt":
+            os.fchmod(lock_file.fileno(), 0o600)
         return lock_file
 
     def release(self, lock_file: Any) -> None:

@@ -3,510 +3,223 @@
 ## Scope
 
 - Repository: `uspto_latest_downloader`
-- Branch analyzed: `codex/cli-only-runtime`
-- Analysis mode: local static architecture review
-- Objective: produce an optimization-oriented blueprint for the current CLI-only runtime
+- Branch: `codex/cli-only-runtime`
+- Goal: document the current post-refactor CLI-only architecture and identify the next optimization steps
 
-## Executive Summary
+## Current Conclusion
 
-The current branch is a compact CLI-first synchronization tool that downloads the latest USPTO ZIP dataset to local disk and persists runtime state in SQLite. The codebase is operationally simple and deployable on a single host, but the internal architecture is still carrying the shape of a previously larger service:
+The branch is now a CLI-only local synchronization runtime. Compared with the earlier state, two major architecture changes are already in place:
 
-- orchestration is concentrated in one large `DownloaderService`
-- persistence and state reconciliation logic dominate the codebase
-- several storage methods remain from the removed HTTP surface and no longer have external callers
-- domain data is passed mostly as raw dictionaries, which makes refactoring and validation harder
-- the branch no longer contains automated tests, so future architectural refactors are now higher risk
+1. synchronization orchestration has been extracted into a dedicated use-case class
+2. SQLite persistence has been split into focused storage modules instead of one monolithic file
 
-The right optimization direction is not “add more framework”. It is to make the current local-runtime design more explicit:
+This means the branch has moved from a single large service plus a large storage file toward a clearer application/infrastructure split. The main remaining work is not another large rewrite. It is boundary polishing:
 
-1. separate application orchestration from infrastructure
-2. replace mixin-heavy composition with narrower collaborators
-3. isolate dead HTTP-era compatibility code
-4. strengthen typed domain boundaries
-5. add minimal operator commands for status and audit access without reintroducing a web layer
+- reduce the compatibility façade in `storage/sqlite.py`
+- rename CLI-neutral projection helpers that still carry `public` naming residue
+- add operator-facing CLI commands for status and audit visibility
+- keep the minimal regression suite in place as more cleanup lands
 
-## Current Runtime Shape
+## Runtime Model
 
-### Entry Points
+### Entry Point
 
-- CLI entry: [run_download_latest_once.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/run_download_latest_once.py)
-- Build helper: [Makefile](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/Makefile)
+- [run_download_latest_once.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/run_download_latest_once.py)
 
-### Core Modules
+### Core Layers
 
-- Shared runtime constants and errors: [core/common.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/core/common.py)
-- Payload contract helpers: [core/contract.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/core/contract.py)
-- Structured logging: [core/logging_utils.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/core/logging_utils.py)
-- Main orchestration: [sync/service.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/service.py)
-- Upstream session and metadata access: [sync/upstream.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/upstream.py)
-- ZIP validation and local file operations: [sync/zip_utils.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/zip_utils.py)
-- SQLite state and audit persistence: [storage/sqlite.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py)
+- Shared config, errors, contracts, and logging:
+  - [core/common.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/core/common.py)
+  - [core/contract.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/core/contract.py)
+  - [core/logging_utils.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/core/logging_utils.py)
+  - [core/runtime_security.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/core/runtime_security.py)
 
-### Size Snapshot
+- Application orchestration:
+  - [sync/service.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/service.py)
+  - [sync/use_case.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/use_case.py)
+  - [sync/collaborators.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/collaborators.py)
 
-- [run_download_latest_once.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/run_download_latest_once.py): 157 lines
-- [sync/service.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/service.py): 546 lines
-- [sync/upstream.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/upstream.py): 354 lines
-- [sync/zip_utils.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/zip_utils.py): 282 lines
-- [storage/sqlite.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py): 1137 lines
-- Runtime code total across the main modules above: about 2816 lines
+- Infrastructure and domain-adjacent logic:
+  - [sync/upstream.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/upstream.py)
+  - [sync/zip_utils.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/zip_utils.py)
+
+- Storage split:
+  - [storage/sqlite.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py)
+  - [storage/sqlite_connection.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite_connection.py)
+  - [storage/state_repository.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/state_repository.py)
+  - [storage/job_run_repository.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/job_run_repository.py)
+  - [storage/runtime_cache_repository.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/runtime_cache_repository.py)
+  - [storage/state_repair_service.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/state_repair_service.py)
+  - [storage/status_projection.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/status_projection.py)
+
+- Minimal regression suite:
+  - [tests/test_cli_minimal.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/tests/test_cli_minimal.py)
+  - [tests/test_runtime_minimal.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/tests/test_runtime_minimal.py)
 
 ## Current Execution Flow
 
-### Main Sync Path
+1. `run_download_latest_once.py` configures logging and builds `DownloaderService`.
+2. `DownloaderService` assembles collaborators and delegates runtime work to `SyncLatestFileUseCase`.
+3. `SyncLatestFileUseCase` acquires a run lock, creates a `job_runs` record, checks cooldown, marks runtime state as running, executes upstream attempts with retry, updates state/history, finalizes audit state, and releases the lock.
+4. `UpstreamGateway` obtains or refreshes cookies, fetches USPTO metadata, selects the latest remote ZIP, and delegates download/skip behavior to `FileStore`.
+5. `StateRepository` uses the split storage modules to read/write SQLite state, audit data, runtime cache, and repair projections.
 
-1. `run_download_latest_once.py` configures logging and builds a service instance.
-2. `DownloaderService.run_download_latest()` acquires a file lock.
-3. A job run row is created in SQLite.
-4. The service checks whether a failure cooldown is active.
-5. Runtime state is marked as `running`.
-6. The service obtains cookies from runtime cache or Playwright.
-7. It uses `httpx` to fetch USPTO metadata.
-8. It selects the latest valid remote ZIP record.
-9. It skips download if a valid local ZIP already exists.
-10. Otherwise it downloads into `.partial`, validates the archive, and atomically moves it into place.
-11. State, history, and job-run audit data are updated.
-12. Cooldown is cleared or applied.
-13. The lock is released and a JSON payload is printed to stdout.
-
-### Current Architecture Diagram
+## Current Architecture Diagram
 
 ```mermaid
 flowchart TD
-    CLI["run_download_latest_once.py"] --> SVC["DownloaderService"]
-    SVC --> ST["DownloaderStorageMixin"]
-    SVC --> UP["DownloaderUpstreamMixin"]
-    SVC --> ZIP["DownloaderZipMixin"]
-    UP --> PW["Playwright + Chromium"]
-    UP --> HX["httpx"]
-    ZIP --> FS["downloads/ + .partial/"]
-    ST --> DB["runtime/app.db"]
-    SVC --> LOCK["runtime/.download.lock"]
+    CLI["run_download_latest_once.py"] --> DS["DownloaderService"]
+    DS --> UC["SyncLatestFileUseCase"]
+    UC --> RL["RunLock"]
+    UC --> CP["CooldownPolicy"]
+    UC --> REPO["StateRepository"]
+    UC --> GW["UpstreamGateway"]
+    UC --> FS["FileStore"]
+    GW --> PW["Playwright + Chromium"]
+    GW --> HX["httpx"]
+    REPO --> SC["sqlite.py compatibility façade"]
+    SC --> CONN["sqlite_connection.py"]
+    SC --> STATE["state_repository.py"]
+    SC --> JOB["job_run_repository.py"]
+    SC --> CACHE["runtime_cache_repository.py"]
+    SC --> REPAIR["state_repair_service.py"]
+    SC --> PROJ["status_projection.py"]
 ```
 
-## Architectural Strengths
+## What Improved In This Branch
 
-- Single responsibility at the deployment level: one CLI process, one synchronization job.
-- Operationally cheap: no external database, queue, cache, or web service runtime.
-- Good defensive behavior around download integrity:
-  - filename validation
-  - upstream URL allowlist
-  - HTML/WAF response rejection
-  - byte-size verification
-  - ZIP structure verification
-- Good local resilience patterns:
-  - cross-process lock
-  - retry with exponential backoff and jitter
-  - cooldown after repeated retryable failure
-  - runtime cache for browser cookies
-- Useful audit model already exists:
-  - `service_state`
-  - `download_history`
-  - `job_runs`
-  - `runtime_cache`
+### 1. Orchestration is no longer centered in one large service class
 
-## Architecture Issues That Matter For Optimization
+Before this refactor, `DownloaderService` contained most of the sync lifecycle itself. Now:
 
-### 1. Orchestration is too concentrated
+- [sync/service.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/service.py) is primarily an assembly layer
+- [sync/use_case.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/use_case.py) contains the sync use case
+- [sync/collaborators.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/collaborators.py) provides narrower substitution points
 
-[sync/service.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/service.py) currently owns:
+### 2. Storage responsibilities are now explicitly separated
 
-- environment-derived configuration assembly
-- lock lifecycle
-- retry lifecycle
-- cooldown lifecycle
-- status snapshot fallback behavior
-- state mutation rules
-- job-run start and finalize orchestration
+The earlier `storage/sqlite.py` monolith has been decomposed into:
 
-This makes `DownloaderService` the main change magnet. Even though the file uses mixins, the public behavior still converges into one class and one main method: [run_download_latest()](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/service.py#L312).
+- connection and schema initialization
+- state persistence
+- job-run persistence
+- runtime cache persistence
+- state repair
+- status projection
 
-Optimization implication:
+This is a real architecture improvement even though [storage/sqlite.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py) still exists as a compatibility façade.
 
-- changes to retries, state, or CLI output still require editing the same orchestration area
-- there is no clean application service boundary separate from infrastructure mechanics
+### 3. Security defaults are safer
 
-### 2. Persistence layer is oversized and mixed-purpose
+- Cookie persistence is now disabled by default through `DEFAULT_COOKIE_CACHE_TTL_SECONDS = 0`
+- runtime artifacts are permission-hardened
+- unexpected CLI failures no longer echo raw internal exception text to stdout
 
-[storage/sqlite.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py) is the largest file in the repository. It currently mixes:
+### 4. Minimal automated regression validation is back
 
-- SQLite access and schema creation
-- legacy migration from `state.json`
-- runtime cache handling
-- audit summary building
-- state normalization
-- disk reconciliation
-- download-history selection logic
-- status projection logic
+The branch now has a minimal non-network regression suite covering:
 
-This file is doing repository work, projection work, and repair work at the same time.
+- CLI success envelope
+- CLI internal failure sanitization
+- cooldown blocking
+- cross-process lock conflict
+- legacy SQLite state migration
+- runtime permission hardening
 
-Optimization implication:
+## Remaining Architecture Issues
 
-- the storage layer is not just “persistence”
-- architectural boundaries are blurred, which makes it hard to reason about what belongs in SQLite code versus application logic
+### 1. `storage/sqlite.py` is still a wide compatibility façade
 
-### 3. HTTP-era storage cleanup is only partially complete
+The file is much smaller in responsibility than before, but it still forwards a large number of methods to the split storage modules. That is acceptable as an intermediate state, but it keeps one synthetic “god façade” in the design.
 
-The explicit HTTP-era projection methods have been removed from [storage/sqlite.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py), which is the right direction for this branch.
+Next step:
 
-What still remains is a naming and responsibility residue:
+- gradually let `StateRepository` compose narrower storage collaborators directly
+- then shrink or remove the façade
 
-- `_select_public_state_records(...)`
-- `_normalize_state_record(...)`
-- `_record_uses_local_file(...)`
+### 2. Some CLI-neutral logic still carries legacy naming
 
-These are still used by the CLI status-building path, but their naming and projection role were inherited from the removed web surface.
+There are still methods like `_select_public_state_records(...)` in the status projection/repair path. They no longer serve a public HTTP surface, so their naming should be normalized around runtime status projection instead of “public” semantics.
 
-Optimization implication:
+Next step:
 
-- dead code has been reduced, but the persistence layer still carries presentation-oriented terminology
-- a second cleanup pass should rename or relocate these helpers into a CLI-neutral status projection boundary
+- rename these helpers to CLI-neutral names such as `select_status_records(...)`
 
-### 4. Domain state is mostly untyped dictionaries
+### 3. Operator commands are still too limited
 
-The code has one strong domain type, [RemoteRecord](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/core/common.py#L84), but most other runtime state uses raw `dict[str, Any]`.
+The runtime now has a cleaner internal architecture, but the external operator interface is still only:
 
-Examples:
+- `python run_download_latest_once.py`
 
-- service state
-- job-run payloads
-- runtime cache payloads
-- CLI status payload
-- serialized error payloads
+Yet the runtime already supports:
 
-Optimization implication:
+- current status projection
+- job-run history listing
+- state repair
 
-- state shape changes are harder to audit
-- serialization concerns leak into business logic
-- refactors rely more on manual inspection than on type guidance
+Next step:
 
-### 5. Mixins are being used as architectural layers
+- add `status`, `job-runs`, and `repair-history` CLI subcommands
 
-`DownloaderService` inherits from:
+### 4. Domain state is still dictionary-heavy
 
-- `DownloaderStorageMixin`
-- `DownloaderZipMixin`
-- `DownloaderUpstreamMixin`
+`RemoteRecord` is typed, but most other data exchanged between the use case, repository, and CLI remains `dict[str, Any]`.
 
-This works for code sharing, but it also hides architectural seams:
+Next step:
 
-- a repository is not an interchangeable service collaborator
-- ZIP filesystem behavior is not just a shared helper
-- upstream browser bootstrap is a distinct infrastructure concern
+- introduce typed dataclasses for `ServiceState`, `SyncResult`, `FailureCooldown`, and `JobRunView`
 
-Optimization implication:
+## Current Security Posture
 
-- inheritance is masking component boundaries that should be explicit composition
-- testing seams and substitution points are weaker than they need to be
+### Positive controls already present
 
-### 6. Operator interface is too narrow for a CLI-only branch
+- path traversal protection for upstream filenames
+- upstream download URL allowlist
+- ZIP signature and structure validation
+- cross-process file lock
+- retry with jitter
+- failure cooldown
+- default non-persistent cookie behavior
+- runtime permission hardening for `runtime/`, `app.db`, WAL/SHM, and `.download.lock`
 
-The runtime is CLI-only, but the branch now has only one operator command:
+### Security assumptions
 
-- `run_download_latest_once.py`
+- the runtime is deployed on a single trusted host
+- if cookie persistence is explicitly enabled via `USPTO_COOKIE_CACHE_TTL_SECONDS > 0`, the `runtime/` directory must remain owner-only
+- there is no external auth boundary because the branch is CLI-only
 
-The persistence layer already supports useful operations such as:
+## Recommended Next Optimization Steps
 
-- [build_status()](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py#L820)
-- [list_job_runs()](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py#L634)
-- [repair_download_history_from_disk()](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py#L1093)
+### Priority 1
 
-But none of them are surfaced as explicit CLI commands.
+- Add operator-facing CLI commands for `status`, `job-runs`, and `repair-history`
+- Rename legacy `public`-named projection helpers to runtime-neutral names
+- Keep the minimal regression suite green on every refactor
 
-Optimization implication:
+### Priority 2
 
-- operational visibility now requires direct code usage or SQLite inspection
-- the removed web endpoints were not replaced by an operator-friendly CLI surface
+- Replace the `DownloaderStorageMixin` façade with direct repository composition
+- Introduce typed runtime models instead of raw dictionaries across the use case boundary
 
-### 7. The branch no longer has automated tests
+### Priority 3
 
-The current branch intentionally removed the local test suite.
+- Add a lightweight release preflight command that checks:
+  - Playwright import
+  - Chromium availability
+  - runtime permission hardening
+  - SQLite read/write
 
-Optimization implication:
+## Deployment Readiness Notes
 
-- architectural refactor risk is now materially higher
-- cleanup work must be phased and small unless tests are reintroduced later
+Before release, the branch should continue to satisfy all of the following:
 
-This does not mean “tests must come back first”, but it does mean architecture work should prefer boundary extraction over behavior rewriting.
-
-## Optimization Objectives
-
-The architecture should be optimized for these outcomes:
-
-1. keep the runtime local-first and CLI-first
-2. reduce the size and responsibility breadth of the orchestration layer
-3. make domain state shapes explicit
-4. separate persistence, upstream access, filesystem, and orchestration
-5. expose operational introspection through CLI commands
-6. remove dead HTTP-era compatibility code from the runtime branch
-
-## Recommended Target Architecture
-
-### Target Package Layout
-
-```text
-uspto_latest_downloader/
-├── cli/
-│   ├── main.py
-│   ├── sync_latest.py
-│   ├── show_status.py
-│   ├── list_job_runs.py
-│   └── repair_history.py
-├── application/
-│   ├── sync_latest_use_case.py
-│   ├── status_service.py
-│   └── audit_service.py
-├── domain/
-│   ├── models.py
-│   ├── errors.py
-│   ├── policies.py
-│   └── state.py
-├── infrastructure/
-│   ├── sqlite_state_repository.py
-│   ├── file_store.py
-│   ├── upstream_client.py
-│   ├── browser_cookie_provider.py
-│   └── run_lock.py
-├── core/
-│   ├── config.py
-│   ├── logging_utils.py
-│   └── contract.py
-└── run_download_latest_once.py
-```
-
-This does not require a framework migration. It is a packaging and boundary improvement.
-
-### Target Dependency Rule
-
-- `cli/` can depend on `application/`, `domain/`, `core/`
-- `application/` can depend on `domain/`, `core/`, and infrastructure interfaces
-- `infrastructure/` can depend on `domain/` and `core/`
-- `domain/` should depend only on Python stdlib and minimal shared contracts
-
-### Target Architecture Diagram
-
-```mermaid
-flowchart TD
-    CLI["CLI Commands"] --> APP["Application Use Cases"]
-    APP --> DOM["Domain Models + Policies"]
-    APP --> REPO["State Repository Interface"]
-    APP --> UP["Upstream Gateway Interface"]
-    APP --> FS["File Store Interface"]
-    APP --> LK["Run Lock Interface"]
-    REPO --> SQL["SQLite Repository"]
-    UP --> BCP["Browser Cookie Provider"]
-    UP --> HX["httpx Upstream Client"]
-    FS --> DISK["Local Filesystem"]
-    LK --> LOCK["Lock File"]
-```
-
-## Concrete Refactoring Recommendations
-
-### Recommendation A: Split `DownloaderService` into a use case plus collaborators
-
-Current problem:
-
-- orchestration logic and infrastructure usage are tightly interwoven
-
-Refactor target:
-
-- `SyncLatestFileUseCase`
-- `RunLock`
-- `CooldownPolicy`
-- `UpstreamGateway`
-- `StateRepository`
-- `FileStore`
-
-Expected gain:
-
-- a smaller application core
-- clearer substitution points
-- less inheritance-driven coupling
-
-### Recommendation B: Decompose `storage/sqlite.py`
-
-Current problem:
-
-- one file is acting as repository, migration manager, runtime cache, projection builder, and reconciliation helper
-
-Refactor target:
-
-- `sqlite_connection.py`
-- `state_repository.py`
-- `job_run_repository.py`
-- `runtime_cache_repository.py`
-- `state_repair_service.py`
-- `status_projection.py`
-
-Expected gain:
-
-- lower cognitive load
-- better separation between persistence and projection logic
-- easier incremental cleanup of dead methods
-
-### Recommendation C: Remove dead HTTP-era methods in a dedicated cleanup pass
-
-Current problem:
-
-- branch still contains unused “public status” and file download projection methods
-
-Refactor target:
-
-- remove unused public-status projection methods after replacing any hidden internal dependency
-- if download-resolution logic is still useful, keep only the filesystem-oriented part under a better name such as `resolve_latest_local_file()`
-
-Expected gain:
-
-- less misleading architecture
-- smaller persistence surface
-
-### Recommendation D: Introduce typed state objects
-
-Current problem:
-
-- most runtime state is shaped through raw dictionaries
-
-Refactor target:
-
-- add dataclasses or typed records for:
-  - `ServiceState`
-  - `JobRun`
-  - `RuntimeCacheItem`
-  - `FailureCooldown`
-  - `SyncResult`
-
-Expected gain:
-
-- clearer contracts
-- easier serialization boundaries
-- safer refactoring of payload shape
-
-Preferred approach:
-
-- use stdlib `dataclass` plus explicit `to_dict()` / `from_dict()` first
-- avoid reintroducing a heavy schema framework unless a real need appears
-
-### Recommendation E: Expand the CLI surface instead of reintroducing HTTP
-
-Current problem:
-
-- operator introspection exists in code but not in the command interface
-
-Refactor target:
-
-- `python run_download_latest_once.py sync-latest`
-- `python run_download_latest_once.py status`
-- `python run_download_latest_once.py job-runs --limit 20`
-- `python run_download_latest_once.py repair-history`
-
-Expected gain:
-
-- preserves the branch’s CLI-only deployment model
-- restores observability without a web runtime
-- makes the audit data actually usable
-
-Preferred implementation:
-
-- stay with `argparse` to keep dependencies minimal
-
-### Recommendation F: Separate policy from mechanics
-
-Current problem:
-
-- retry, jitter, cooldown, and state transitions are mixed directly into orchestration code
-
-Refactor target:
-
-- `RetryPolicy`
-- `CooldownPolicy`
-- `SyncStateTransitionRules`
-
-Expected gain:
-
-- easier tuning
-- clearer reasoning about failure behavior
-- fewer side effects buried inside one method
-
-## Suggested Refactoring Sequence
-
-### Phase 1: Safe structural cleanup
-
-- add `Project_Architecture_Blueprint.md`
-- move configuration loading from `build_latest_service()` into `core/config.py`
-- extract repository and gateway interfaces without changing runtime behavior
-- remove dead HTTP-only methods that have no callers
-
-Risk:
-
-- low to medium
-
-### Phase 2: Orchestration decomposition
-
-- replace mixin-driven service inheritance with explicit collaborators
-- move retry and cooldown behavior into policy classes
-- move file lock handling into its own helper
-
-Risk:
-
-- medium
-
-### Phase 3: CLI capability expansion
-
-- add `status`, `job-runs`, and `repair-history` commands
-- keep `sync-latest` as the default command for backward compatibility
-
-Risk:
-
-- low
-
-### Phase 4: Data contract hardening
-
-- introduce typed runtime models
-- restrict dictionary use to repository serialization boundaries
-
-Risk:
-
-- medium
-
-## Priority Matrix
-
-| Priority | Item | Why |
-| --- | --- | --- |
-| P1 | Remove dead HTTP-era storage methods | Low-cost cleanup with immediate architectural clarity |
-| P1 | Extract config loading into a dedicated module | Simplifies service construction and future CLI growth |
-| P1 | Add CLI status and audit commands | Restores operator visibility in a CLI-only branch |
-| P2 | Break up `storage/sqlite.py` | Largest maintainability win after dead-code cleanup |
-| P2 | Replace mixin-centric service with explicit collaborators | Strong long-term architecture improvement |
-| P3 | Introduce typed state models | High value, but best done after module boundaries improve |
-
-## What Should Stay As-Is
-
-- SQLite as the local runtime store
-- Playwright as the cookie bootstrap mechanism
-- `httpx` for upstream metadata and file transport
-- file-based run lock
-- structured JSON logs to `stderr`
-- local filesystem storage under `downloads/` and `runtime/`
-
-These are aligned with the branch’s operational profile and do not need replacement to achieve a cleaner architecture.
-
-## Non-Goals
-
-- reintroducing a web API
-- adding a full ORM
-- adding a distributed queue or cache
-- converting the runtime to async end-to-end
-- expanding deployment complexity with containers or orchestration just for architecture purity
-
-## Immediate Next Actions
-
-1. Rename or relocate the remaining public-named status projection helpers inside [storage/sqlite.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py).
-2. Extract runtime configuration loading from [sync/service.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/sync/service.py#L483) into a dedicated config module.
-3. Introduce a `status` CLI command backed by [build_status()](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py#L820).
-4. Split [storage/sqlite.py](/Users/lin/Documents/Code/3月份/uspto_latest_downloader/uspto_latest_downloader/storage/sqlite.py) before any larger behavior rewrite.
-5. Only after the boundaries are cleaner, replace mixin inheritance with explicit collaborator injection.
+- `make test`
+- `make pycompile`
+- at least one real CLI smoke run against the current environment
+- Playwright import available
+- Chromium installed
+- dependency vulnerability scan completed
 
 ## Bottom Line
 
-The branch is already operationally lean. The real optimization opportunity is not to simplify deployment further, but to simplify internal boundaries. The code should evolve from “one orchestrator class plus large utility mixins” into a small application core sitting on explicit storage, upstream, filesystem, and policy collaborators. That will reduce maintenance cost without changing the branch’s intentionally simple CLI-only runtime model.
+This branch is no longer in the “single large service + single large SQLite module” state. The architecture has crossed the important threshold: orchestration and persistence responsibilities are now explicitly split. The remaining work is refinement, not another foundational rewrite.
