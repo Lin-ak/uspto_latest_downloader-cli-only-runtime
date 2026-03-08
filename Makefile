@@ -2,8 +2,8 @@ PYTHON ?= $(shell if [ -x ./.venv/bin/python ]; then printf '%s' ./.venv/bin/pyt
 PYTHON_FILES = \
 	run_download_latest_once.py \
 	core/__init__.py core/common.py core/contract.py core/logging_utils.py \
-	sync/__init__.py sync/service.py sync/upstream.py sync/zip_utils.py \
-	storage/__init__.py storage/sqlite.py
+	sync/__init__.py sync/collaborators.py sync/service.py sync/upstream.py sync/use_case.py sync/zip_utils.py \
+	storage/__init__.py storage/job_run_repository.py storage/runtime_cache_repository.py storage/sqlite.py storage/sqlite_connection.py storage/state_repair_service.py storage/state_repository.py storage/status_projection.py
 
 .PHONY: pycompile run
 
