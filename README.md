@@ -8,7 +8,7 @@
 
 这个目录包含应用代码、运行文档和本地运维文件。当前实现已经按功能分包，根目录只保留少量运行入口。
 
-详细接口见 [API.md](./API.md)，运行与维护规范见 [SOP.md](./SOP.md)。
+详细接口见 [API.md](./docs/API.md)，运行与维护规范见 [SOP.md](./docs/SOP.md)。
 
 ## 本地运行
 
@@ -150,6 +150,7 @@ sudo systemctl status uspto-latest-downloader.timer
 - `run_download_latest_once.py`：CLI 同步入口
 - `Makefile`：本地统一运行与校验入口
 - `.env.example`：本地环境变量样例
+- `docs/`：项目接口与运维文档
 - `tests/`：测试目录
 - `downloads/`：保存已下载 ZIP
 - `runtime/app.db`：保存运行状态、下载历史和 `job_runs` 执行记录
