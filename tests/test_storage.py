@@ -12,7 +12,7 @@ from contextlib import closing
 from pathlib import Path
 from unittest import mock
 
-from downloader import DownloadError, PUBLIC_ERROR_MESSAGES, RemoteRecord
+from core.common import DownloadError, PUBLIC_ERROR_MESSAGES, RemoteRecord
 
 from tests.common import make_service
 
@@ -349,6 +349,48 @@ class DownloaderStorageTest(unittest.TestCase):
             self.assertEqual(payload["action"], "skipped")
             self.assertEqual(service.build_status.call_count, 3)
 
+    def test_run_download_latest_success_preserves_result_when_final_status_snapshot_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = make_service(Path(temp_dir))
+            record = RemoteRecord(
+                file_name="apc260304.zip",
+                official_data_date="2026-03-04",
+                release_date_raw="2026-03-05 00:52:55",
+                file_size_bytes=123,
+                download_url="https://example.com/apc260304.zip",
+            )
+            result = {
+                "action": "skipped",
+                "last_download": record.to_dict(status="skipped"),
+                "latest_remote": record.to_dict(status="downloaded"),
+            }
+
+            def fake_run_download_latest_with_retries(
+                *,
+                trigger_source: str,
+                job_run_id: int | None = None,
+            ) -> tuple[RemoteRecord, dict[str, object], int]:
+                return record, result, 1
+
+            service._run_download_latest_with_retries = fake_run_download_latest_with_retries  # type: ignore[method-assign]
+            service.build_status = mock.Mock(  # type: ignore[method-assign]
+                side_effect=[
+                    {"running": False},
+                    {"running": False, "last_action": "skipped"},
+                    RuntimeError("status snapshot broken"),
+                ]
+            )
+
+            payload = service.run_download_latest(trigger_source="test")
+
+            self.assertEqual(payload["action"], "skipped")
+            self.assertFalse(payload["status"]["running"])
+            self.assertEqual(service.build_status.call_count, 3)
+
+            job_runs_payload = service.list_job_runs(limit=10, offset=0)
+            self.assertEqual(job_runs_payload["pagination"]["total"], 1)
+            self.assertEqual(job_runs_payload["job_runs"][0]["outcome"], "skipped")
+
     def test_run_download_latest_records_failed_job_run(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service = make_service(Path(temp_dir))
@@ -476,3 +518,36 @@ class DownloaderStorageTest(unittest.TestCase):
             self.assertFalse(service.load_state()["running"])
             lock_file = service._acquire_run_lock()
             service._release_run_lock(lock_file)
+
+    def test_build_status_normalizes_download_history_and_local_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = make_service(Path(temp_dir))
+            service.ensure_layout()
+
+            local_path = service.downloads_dir / "apc260304.zip"
+            with zipfile.ZipFile(local_path, "w") as archive:
+                archive.writestr("latest.txt", "latest")
+
+            stale_entry = {
+                "file_name": "apc260304.zip",
+                "official_data_date": "2026-03-04",
+                "release_date_raw": "2026-03-05 00:00:00",
+                "file_size_bytes": local_path.stat().st_size,
+                "download_url": "https://data.uspto.gov/ui/datasets/products/files/TRTDXFAP/apc260304.zip",
+                "local_path": "/tmp/old-workspace/apc260304.zip",
+                "downloaded_at": "2026-03-05T10:00:00+08:00",
+                "status": "downloaded",
+            }
+
+            state = service.load_state()
+            state["latest_remote"] = dict(stale_entry)
+            state["last_download"] = dict(stale_entry)
+            state["download_history"] = [dict(stale_entry)]
+            service.write_state(state)
+
+            payload = service.build_status()
+
+            self.assertEqual(payload["latest_remote"]["local_path"], str(local_path))
+            self.assertEqual(payload["last_download"]["local_path"], str(local_path))
+            self.assertEqual(len(payload["download_history"]), 1)
+            self.assertEqual(payload["download_history"][0]["local_path"], str(local_path))

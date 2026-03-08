@@ -10,13 +10,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from api_contract import (
-    SYNC_LATEST_FILE_OPERATION,
-    SYNC_LATEST_FILE_RECOMMENDED_ENTRYPOINT,
-    SYNC_LATEST_FILE_RESOURCE,
-    SYNC_LATEST_FILE_TRIGGER_POLICY,
-)
-from downloader_common import (
+from core.common import (
     PUBLIC_ERROR_MESSAGES,
     DownloadError,
     error_hint_for_code,
@@ -25,6 +19,12 @@ from downloader_common import (
     normalize_release_datetime_text,
     parse_iso_date,
     parse_release_datetime,
+)
+from core.contract import (
+    SYNC_LATEST_FILE_OPERATION,
+    SYNC_LATEST_FILE_RECOMMENDED_ENTRYPOINT,
+    SYNC_LATEST_FILE_RESOURCE,
+    SYNC_LATEST_FILE_TRIGGER_POLICY,
 )
 
 
@@ -798,8 +798,27 @@ class DownloaderStorageMixin:
             self.write_state(state)
         return state
 
+    def _build_status_state_for_read(self, state: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        payload = self.default_state()
+        payload.update(state or self.load_state())
+
+        if state is None:
+            latest_remote, last_download = self._select_public_status_records_for_read(payload)
+            download_history = self._list_downloaded_entries()
+        else:
+            latest_remote, last_download = self._select_public_state_records(
+                payload,
+                latest_downloaded=self._select_latest_downloaded_entry(payload),
+            )
+            download_history = self._list_cached_downloaded_entries(payload)
+
+        payload["latest_remote"] = latest_remote
+        payload["last_download"] = last_download
+        payload["download_history"] = download_history
+        return payload
+
     def build_status(self, state: Dict[str, Any] | None = None) -> Dict[str, Any]:
-        payload = dict(state or self.load_state())
+        payload = self._build_status_state_for_read(state)
         payload["downloads_dir"] = str(self.downloads_dir)
         payload["recommended_scheduler_entrypoint"] = SYNC_LATEST_FILE_RECOMMENDED_ENTRYPOINT
         payload["manual_sync_note"] = SYNC_LATEST_FILE_TRIGGER_POLICY["note"]

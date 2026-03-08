@@ -9,19 +9,19 @@ from typing import Callable
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 
-from api_http import (
+from app.http import (
     download_file_response,
     error_response,
     execute_service_call,
     log_internal_error,
 )
-from api_paths import (
+from app.paths import (
     PUBLIC_LATEST_FILE_DOWNLOAD_PATH,
     PUBLIC_ROUTE_ERRORS,
     PUBLIC_STATUS_PATH,
 )
-from api_schemas import ErrorResponseModel, PublicStatusResponseModel
-from downloader import DownloaderService
+from app.schemas import ErrorResponseModel, PublicStatusResponseModel
+from sync.service import DownloaderService
 
 
 ServiceGetter = Callable[[], DownloaderService]

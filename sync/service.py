@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from api_contract import SYNC_LATEST_FILE_RECOMMENDED_ENTRYPOINT, SYNC_LATEST_FILE_TRIGGER_POLICY
 import fcntl
 import json
 import logging
@@ -15,7 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Dict
 
-from downloader_common import (
+from core.common import (
     DEFAULT_COOKIE_CACHE_TTL_SECONDS,
     DATASET_PAGE_URL,
     DB_PATH,
@@ -37,11 +36,13 @@ from downloader_common import (
     RemoteRecord,
     iso_now,
     logger,
+    resolve_runtime_paths,
 )
-from downloader_storage import DownloaderStorageMixin
-from downloader_upstream import DownloaderUpstreamMixin
-from downloader_zip import DownloaderZipMixin
-from logging_utils import log_event
+from core.contract import SYNC_LATEST_FILE_RECOMMENDED_ENTRYPOINT, SYNC_LATEST_FILE_TRIGGER_POLICY
+from core.logging_utils import log_event
+from storage.sqlite import DownloaderStorageMixin
+from sync.upstream import DownloaderUpstreamMixin
+from sync.zip_utils import DownloaderZipMixin
 
 
 class DownloaderService(DownloaderStorageMixin, DownloaderZipMixin, DownloaderUpstreamMixin):
@@ -320,6 +321,7 @@ class DownloaderService(DownloaderStorageMixin, DownloaderZipMixin, DownloaderUp
         attempts = 0
         error_payload: Dict[str, Any] | None = None
         primary_exception: Exception | None = None
+        return_status: Dict[str, Any] | None = None
 
         try:
             job_run_id = self.create_job_run(
@@ -415,10 +417,9 @@ class DownloaderService(DownloaderStorageMixin, DownloaderZipMixin, DownloaderUp
                         step="apply_failure_cooldown",
                         suppress_errors=suppress_cleanup_errors,
                     )
-                final_status = (
-                    self._safe_build_status(cleanup_state, phase="before_job_run_finalize")
-                    if suppress_cleanup_errors
-                    else self.build_status(cleanup_state)
+                final_status = self._safe_build_status(
+                    cleanup_state,
+                    phase="before_job_run_finalize",
                 )
                 final_latest_remote = result["latest_remote"] if result is not None else (
                     self._enrich_with_local_state(latest_remote) if latest_remote is not None else None
@@ -442,6 +443,10 @@ class DownloaderService(DownloaderStorageMixin, DownloaderZipMixin, DownloaderUp
                         step="finalize_job_run",
                         suppress_errors=suppress_cleanup_errors,
                     )
+                return_status = self._safe_build_status(
+                    cleanup_state,
+                    phase="after_job_run_finalize",
+                )
                 log_event(
                     logger,
                     logging.INFO if error_payload is None else logging.ERROR,
@@ -463,7 +468,7 @@ class DownloaderService(DownloaderStorageMixin, DownloaderZipMixin, DownloaderUp
 
         return {
             "action": result["action"],
-            "status": self.build_status(),
+            "status": return_status or self._fallback_status_snapshot(),
             "summary": self._build_job_run_summary(
                 outcome=str(result["action"]),
                 trigger_source=trigger_source,
@@ -512,7 +517,20 @@ def build_latest_service() -> DownloaderService:
             )
             return default
 
+    resolved_paths = resolve_runtime_paths(
+        os.environ.get("USPTO_ROOT_DIR"),
+        os.environ.get("USPTO_DOWNLOADS_DIR"),
+        os.environ.get("USPTO_RUNTIME_DIR"),
+    )
+
     return DownloaderService(
+        root_dir=resolved_paths["root_dir"],
+        downloads_dir=resolved_paths["downloads_dir"],
+        partial_dir=resolved_paths["partial_dir"],
+        runtime_dir=resolved_paths["runtime_dir"],
+        state_path=resolved_paths["state_path"],
+        db_path=resolved_paths["db_path"],
+        lock_path=resolved_paths["lock_path"],
         cookie_cache_ttl_seconds=_read_int_env(
             "USPTO_COOKIE_CACHE_TTL_SECONDS",
             DEFAULT_COOKIE_CACHE_TTL_SECONDS,

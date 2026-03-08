@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -14,13 +15,41 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from downloader import DownloadError, PUBLIC_ERROR_MESSAGES, RemoteRecord
+from core.common import DownloadError, PUBLIC_ERROR_MESSAGES, RemoteRecord
 import run_download_latest_once
+from sync.service import build_latest_service
 
 from tests.common import ROOT_DIR, make_service
 
 
 class DownloaderServiceBehaviorTest(unittest.TestCase):
+    def test_build_latest_service_uses_project_root_runtime_paths(self) -> None:
+        service = build_latest_service()
+
+        self.assertEqual(service.root_dir, ROOT_DIR)
+        self.assertEqual(service.downloads_dir, ROOT_DIR / "downloads")
+        self.assertEqual(service.runtime_dir, ROOT_DIR / "runtime")
+        self.assertEqual(service.db_path, ROOT_DIR / "runtime" / "app.db")
+
+    def test_build_latest_service_honors_env_path_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_dir = Path(temp_dir) / "workspace"
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "USPTO_ROOT_DIR": str(base_dir),
+                    "USPTO_DOWNLOADS_DIR": "artifacts/downloads",
+                    "USPTO_RUNTIME_DIR": "state/runtime",
+                },
+                clear=False,
+            ):
+                service = build_latest_service()
+
+        self.assertEqual(service.root_dir, base_dir.resolve())
+        self.assertEqual(service.downloads_dir, (base_dir / "artifacts" / "downloads").resolve())
+        self.assertEqual(service.runtime_dir, (base_dir / "state" / "runtime").resolve())
+        self.assertEqual(service.db_path, (base_dir / "state" / "runtime" / "app.db").resolve())
+
     def test_select_latest_remote_filters_docs_and_uses_stable_sort(self) -> None:
         service = make_service(Path(tempfile.mkdtemp()))
         payload = {
@@ -207,7 +236,7 @@ import sys
 import time
 from pathlib import Path
 sys.path.insert(0, {str(ROOT_DIR)!r})
-from downloader import DownloaderService
+from sync.service import DownloaderService
 root = Path({str(root_dir)!r})
 service = DownloaderService(
     root_dir=root,
@@ -387,7 +416,7 @@ service._release_run_lock(lock_file)
             service._random = mock.Mock()
             service._random.uniform.return_value = 0.25
 
-            with mock.patch("downloader_service.time.sleep") as sleep_mock:
+            with mock.patch("sync.service.time.sleep") as sleep_mock:
                 latest_remote, payload, attempts_used = service._run_download_latest_with_retries(
                     trigger_source="test"
                 )
@@ -450,9 +479,24 @@ class DownloadOnceCliTest(unittest.TestCase):
         service = mock.Mock()
         service.run_download_latest.return_value = {
             "action": "skipped",
-            "status": {"running": False, "last_action": "skipped"},
-            "latest_remote": {"file_name": "apc260305.zip"},
-            "last_download": {"file_name": "apc260305.zip", "status": "skipped"},
+            "status": {
+                "running": False,
+                "last_action": "skipped",
+                "downloads_dir": "/srv/app/downloads",
+                "download_history": [
+                    {
+                        "file_name": "apc260305.zip",
+                        "local_path": "/srv/app/downloads/apc260305.zip",
+                        "status": "downloaded",
+                    }
+                ],
+            },
+            "latest_remote": {"file_name": "apc260305.zip", "local_path": "/srv/app/downloads/apc260305.zip"},
+            "last_download": {
+                "file_name": "apc260305.zip",
+                "status": "skipped",
+                "local_path": "/srv/app/downloads/apc260305.zip",
+            },
         }
 
         with mock.patch.object(run_download_latest_once, "build_latest_service", return_value=service):
@@ -468,6 +512,10 @@ class DownloadOnceCliTest(unittest.TestCase):
         self.assertEqual(payload["data"]["outcome"], "skipped")
         self.assertIn("summary", payload["data"])
         self.assertEqual(payload["data"]["trigger_policy"]["recommended_entrypoint"], "run_download_latest_once.py")
+        self.assertNotIn("downloads_dir", payload["data"]["status"])
+        self.assertNotIn("local_path", payload["data"]["latest_remote"])
+        self.assertNotIn("local_path", payload["data"]["last_download"])
+        self.assertNotIn("local_path", payload["data"]["status"]["download_history"][0])
 
     def test_cli_error_payload_matches_api_contract(self) -> None:
         service = mock.Mock()
@@ -476,7 +524,14 @@ class DownloadOnceCliTest(unittest.TestCase):
             code="download_in_progress",
             public_message=PUBLIC_ERROR_MESSAGES["download_in_progress"],
         )
-        service.build_status.return_value = {"running": True}
+        service.build_status.return_value = {
+            "running": True,
+            "downloads_dir": "/srv/app/downloads",
+            "last_download": {
+                "file_name": "apc260305.zip",
+                "local_path": "/srv/app/downloads/apc260305.zip",
+            },
+        }
 
         with mock.patch.object(run_download_latest_once, "build_latest_service", return_value=service):
             stdout = io.StringIO()
@@ -491,6 +546,8 @@ class DownloadOnceCliTest(unittest.TestCase):
         self.assertEqual(payload["error"]["details"]["operation"], "sync_latest_file")
         self.assertEqual(payload["error"]["details"]["resource"], "files/latest")
         self.assertTrue(payload["error"]["details"]["status"]["running"])
+        self.assertNotIn("downloads_dir", payload["error"]["details"]["status"])
+        self.assertNotIn("local_path", payload["error"]["details"]["status"]["last_download"])
 
     def test_cli_download_error_still_emits_json_when_status_snapshot_fails(self) -> None:
         service = mock.Mock()

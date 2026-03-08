@@ -11,7 +11,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from downloader import DownloaderService  # noqa: E402
+from sync.service import DownloaderService  # noqa: E402
 
 
 def make_service(root_dir: Path, **kwargs: object) -> DownloaderService:

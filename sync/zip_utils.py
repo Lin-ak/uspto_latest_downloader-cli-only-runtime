@@ -9,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List
 
-from downloader_common import (
+from core.common import (
     OFFICIAL_DATE_FILE_NAME_RE,
     DownloadError,
     PUBLIC_ERROR_MESSAGES,

@@ -6,7 +6,7 @@
 [![SQLite](https://img.shields.io/badge/SQLite-runtime-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![Mode](https://img.shields.io/badge/Sync-CLI--first-6C5CE7)](./run_download_latest_once.py)
 
-这个目录包含应用代码、运行文档和本地运维文件。
+这个目录包含应用代码、运行文档和本地运维文件。当前实现已经按功能分包，根目录只保留少量兼容入口。
 
 详细接口见 [API.md](./API.md)，运行与维护规范见 [SOP.md](./SOP.md)。
 
@@ -28,6 +28,17 @@ set -a
 source .env
 set +a
 ```
+
+路径相关环境变量：
+
+- `USPTO_ROOT_DIR`：统一指定运行根目录；未显式设置下载/运行目录时，默认在该目录下使用 `downloads/` 和 `runtime/`
+- `USPTO_DOWNLOADS_DIR`：单独指定 ZIP 下载目录
+- `USPTO_RUNTIME_DIR`：单独指定 `app.db`、锁文件和运行时缓存目录
+
+说明：
+
+- 相对路径会以 `USPTO_ROOT_DIR` 为基准；如果未设置 `USPTO_ROOT_DIR`，则以当前项目根目录为基准
+- 如果三个变量都不设置，行为与当前默认值一致
 
 常用入口：
 
@@ -128,16 +139,14 @@ sudo systemctl status uspto-latest-downloader.timer
 
 ## 目录
 
+- `app/`：HTTP 应用层，包括路由、响应模型和应用装配
+- `core/`：共享契约、常量与日志工具
+- `sync/`：同步主链路，包括调度、上游访问和 ZIP 处理
+- `storage/`：SQLite 持久化层
+- `server.py`：兼容启动入口，实际应用装配在 `app/factory.py`
+- `run_download_latest_once.py`：CLI 同步入口
 - `Makefile`：本地统一运行与校验入口
 - `.env.example`：本地环境变量样例
-- `api_schemas.py`：FastAPI 响应模型
-- `api_routes_public.py`：公开页面和公开只读接口
-- `app_factory.py`：FastAPI 应用装配与启动入口
-- `downloader_service.py`：下载任务编排与重试逻辑
-- `downloader_storage.py`：SQLite 状态、历史与 `job_runs` 持久化
-- `downloader_upstream.py`：USPTO 上游浏览器与元数据访问
-- `downloader_zip.py`：ZIP 文件校验、落盘与本地文件回补
-- `run_download_latest_once.py`：独立下载任务入口，适合 `cron` / `systemd timer`
 - `tests/`：测试目录
 - `downloads/`：保存已下载 ZIP
 - `runtime/app.db`：保存运行状态、下载历史和 `job_runs` 执行记录
@@ -153,3 +162,9 @@ sudo systemctl status uspto-latest-downloader.timer
 - 最新文件解析路径只做轻量 ZIP 可读性校验，不再对历史 ZIP 重复全量 `testzip()`
 - 运行日志统一走结构化 JSON logging，输出到 `stderr`
 - 应用启动时会在 FastAPI lifespan 中执行运行状态修复和文件历史回补
+
+## 包结构说明
+
+- 项目内部实现优先从 `app/`、`core/`、`sync/`、`storage/` 导入
+- 根目录只保留 `server.py`、`run_download_latest_once.py` 这 2 个运行入口
+- 其余实现模块已经收敛到分包目录，不再建议新增根目录级功能文件

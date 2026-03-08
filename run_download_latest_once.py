@@ -7,18 +7,43 @@ import json
 import logging
 import sys
 
-from api_contract import (
+from core.common import error_hint_for_code
+from core.contract import (
     SYNC_LATEST_FILE_OPERATION,
     SYNC_LATEST_FILE_RESOURCE,
     error_payload,
     sync_latest_file_payload,
 )
-from downloader import DownloadError, build_latest_service
-from downloader_common import error_hint_for_code
-from logging_utils import configure_logging, log_event
+from core.logging_utils import configure_logging, log_event
+from sync.service import DownloadError, build_latest_service
 
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_cli_record(record: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(record, dict):
+        return None
+
+    sanitized = dict(record)
+    sanitized.pop("local_path", None)
+    return sanitized
+
+
+def _sanitize_cli_status_payload(status: dict[str, object | None]) -> dict[str, object | None]:
+    sanitized = dict(status)
+    sanitized.pop("downloads_dir", None)
+    sanitized["latest_remote"] = _sanitize_cli_record(sanitized.get("latest_remote"))  # type: ignore[arg-type]
+    sanitized["last_download"] = _sanitize_cli_record(sanitized.get("last_download"))  # type: ignore[arg-type]
+    history = sanitized.get("download_history")
+    if isinstance(history, list):
+        sanitized["download_history"] = [
+            sanitized_entry
+            for item in history
+            for sanitized_entry in [_sanitize_cli_record(item)]  # type: ignore[arg-type]
+            if sanitized_entry is not None
+        ]
+    return sanitized
 
 
 def _fallback_status_payload() -> dict[str, object | None]:
@@ -45,7 +70,9 @@ def _safe_status_payload(service: object) -> dict[str, object | None]:
         )
         return _fallback_status_payload()
 
-    return status if isinstance(status, dict) else _fallback_status_payload()
+    if not isinstance(status, dict):
+        return _fallback_status_payload()
+    return _sanitize_cli_status_payload(status)
 
 
 def main() -> int:
@@ -114,9 +141,9 @@ def main() -> int:
     payload = json.dumps(
         sync_latest_file_payload(
             outcome=str(result["action"]),
-            status=result["status"],
-            latest_remote=result["latest_remote"],
-            last_download=result["last_download"],
+            status=_sanitize_cli_status_payload(result["status"]),
+            latest_remote=_sanitize_cli_record(result["latest_remote"]),
+            last_download=_sanitize_cli_record(result["last_download"]),
             summary=result.get("summary"),
         ),
         ensure_ascii=False,

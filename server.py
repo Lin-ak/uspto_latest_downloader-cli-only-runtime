@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 
-from api_paths import (
+from app.factory import app, create_app, main, parse_args
+from app.paths import (
     HEALTH_READY_PATH,
     PUBLIC_LATEST_FILE_DOWNLOAD_PATH,
     PUBLIC_STATUS_PATH,
 )
-from app_factory import app, create_app, main, parse_args
 
 __all__ = [
     "PUBLIC_STATUS_PATH",

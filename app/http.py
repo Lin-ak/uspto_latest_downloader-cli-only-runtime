@@ -14,8 +14,8 @@ from typing import Any, Callable
 from fastapi import Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from api_contract import error_payload, success_payload
-from downloader_common import error_hint_for_code
+from core.common import error_hint_for_code
+from core.contract import error_payload, success_payload
 
 
 logger = logging.getLogger("server")

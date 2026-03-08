@@ -12,6 +12,7 @@ http://127.0.0.1:8010
 - JSON 响应默认带 `Cache-Control: no-store`
 - 运行状态默认保存在 `runtime/app.db`
 - 运行日志使用结构化 JSON logging，输出到 `stderr`
+- 代码实现按功能分包到 `app/`、`core/`、`sync/`、`storage/`，根目录脚本主要保留启动与兼容入口
 
 ## 统一返回结构
 
@@ -95,6 +96,20 @@ http://127.0.0.1:8010
 
 用途：公开状态查询，适合看板与业务状态检查。
 
+说明：公开接口带最小限度的内存级限流；同一来源在短时间内请求过于频繁时会返回 `429 Too Many Requests`。
+
+限流响应示例：
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "rate_limited",
+    "message": "请求过于频繁，请稍后重试。"
+  }
+}
+```
+
 ### `GET /api/v1/files/latest/download`
 
 用途：直接下载当前最新的本地 ZIP 文件。
@@ -118,6 +133,8 @@ X-Content-Type-Options: nosniff
 - `If-Modified-Since`
 
 命中时返回：`304 Not Modified`
+
+如果同一来源在短时间内请求过于频繁，会返回：`429 Too Many Requests`
 
 无可用文件：
 

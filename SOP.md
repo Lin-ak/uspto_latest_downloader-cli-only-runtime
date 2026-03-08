@@ -13,6 +13,15 @@
 
 常规定时同步一律通过 CLI 入口执行，不通过 HTTP 触发。
 
+实现目录按功能分为：
+
+- `app/`：HTTP 应用层
+- `core/`：共享契约、常量、日志
+- `sync/`：同步主链路
+- `storage/`：SQLite 持久化
+
+根目录脚本保留为兼容入口与启动入口。
+
 ## 3. 首次部署
 
 ```bash
@@ -22,6 +31,14 @@ python3 -m venv .venv
 ./.venv/bin/playwright install chromium
 cp .env.example .env
 ```
+
+如果要修改下载目录或运行目录，优先改 `.env`：
+
+- `USPTO_ROOT_DIR`
+- `USPTO_DOWNLOADS_DIR`
+- `USPTO_RUNTIME_DIR`
+
+相对路径默认以 `USPTO_ROOT_DIR` 为基准；未设置时以项目根目录为基准。
 
 ## 4. 启动与停止
 

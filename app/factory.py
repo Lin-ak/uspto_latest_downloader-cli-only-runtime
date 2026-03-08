@@ -6,21 +6,30 @@ from __future__ import annotations
 import argparse
 from contextlib import asynccontextmanager
 import logging
+from collections import deque
+import math
+import threading
+import time
+from http import HTTPStatus
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 
-from api_http import error_response, success_response
-from api_paths import HEALTH_READY_PATH, PUBLIC_LATEST_FILE_DOWNLOAD_PATH
-from api_routes_public import register_public_routes
-from api_schemas import ErrorResponseModel, HealthResponseModel
-from downloader import DownloaderService, build_latest_service
-from logging_utils import configure_logging, log_event
+from app.http import error_response, success_response
+from app.paths import HEALTH_READY_PATH, PUBLIC_LATEST_FILE_DOWNLOAD_PATH, PUBLIC_STATUS_PATH
+from app.routes_public import register_public_routes
+from app.schemas import ErrorResponseModel, HealthResponseModel
+from core.logging_utils import configure_logging, log_event
+from sync.service import DownloaderService, build_latest_service
 
 
 service = build_latest_service()
 logger = logging.getLogger("server")
+DEFAULT_RATE_LIMIT_RULES = {
+    PUBLIC_STATUS_PATH: (60, 60),
+    PUBLIC_LATEST_FILE_DOWNLOAD_PATH: (10, 60),
+}
 
 
 class SelectiveGZipMiddleware:
@@ -36,10 +45,72 @@ class SelectiveGZipMiddleware:
         await self.gzip_app(scope, receive, send)
 
 
+class InMemoryRateLimitMiddleware:
+    def __init__(self, app, *, rules: dict[str, tuple[int, int]]) -> None:
+        self.app = app
+        self.rules = {
+            path: (max(1, int(limit)), max(1, int(window_seconds)))
+            for path, (limit, window_seconds) in rules.items()
+        }
+        self._state: dict[tuple[str, str], deque[float]] = {}
+        self._lock = threading.Lock()
+
+    def _client_key(self, scope: dict) -> str:
+        client = scope.get("client")
+        if isinstance(client, (tuple, list)) and client:
+            host = str(client[0]).strip()
+            if host:
+                return host
+        return "unknown"
+
+    def _consume(self, client_key: str, path: str) -> tuple[bool, int, int]:
+        limit, window_seconds = self.rules[path]
+        now = time.monotonic()
+        window_start = now - window_seconds
+        bucket_key = (client_key, path)
+
+        with self._lock:
+            hits = self._state.setdefault(bucket_key, deque())
+            while hits and hits[0] <= window_start:
+                hits.popleft()
+
+            if len(hits) >= limit:
+                retry_after = max(1, math.ceil(window_seconds - (now - hits[0])))
+                return False, retry_after, limit
+
+            hits.append(now)
+            return True, 0, limit
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = str(scope.get("path", "")).strip()
+        if path not in self.rules:
+            await self.app(scope, receive, send)
+            return
+
+        allowed, retry_after, limit = self._consume(self._client_key(scope), path)
+        if allowed:
+            await self.app(scope, receive, send)
+            return
+
+        response = error_response(
+            HTTPStatus.TOO_MANY_REQUESTS,
+            "rate_limited",
+            "请求过于频繁，请稍后重试。",
+        )
+        response.headers["Retry-After"] = str(retry_after)
+        response.headers["X-RateLimit-Limit"] = str(limit)
+        await response(scope, receive, send)
+
+
 def create_app(
     downloader_service: DownloaderService | None = None,
     *,
     run_startup_checks: bool = True,
+    rate_limit_rules: dict[str, tuple[int, int]] | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -69,6 +140,10 @@ def create_app(
         SelectiveGZipMiddleware,
         minimum_size=1024,
         excluded_paths=(PUBLIC_LATEST_FILE_DOWNLOAD_PATH,),
+    )
+    app.add_middleware(
+        InMemoryRateLimitMiddleware,
+        rules=rate_limit_rules or DEFAULT_RATE_LIMIT_RULES,
     )
     app.state.service = downloader_service or service
 

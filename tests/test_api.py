@@ -10,11 +10,11 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from server import (
+from app.factory import create_app
+from app.paths import (
     HEALTH_READY_PATH,
     PUBLIC_LATEST_FILE_DOWNLOAD_PATH,
     PUBLIC_STATUS_PATH,
-    create_app,
 )
 from tests.common import make_service
 
@@ -144,6 +144,30 @@ class PublicDownloadEndpointTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertNotEqual(response.headers.get("content-encoding"), "gzip")
 
+    def test_public_download_latest_is_rate_limited(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = make_service(Path(temp_dir))
+            service.ensure_layout()
+
+            latest_path = service.downloads_dir / "apc260304.zip"
+            with zipfile.ZipFile(latest_path, "w") as archive:
+                archive.writestr("latest.txt", "latest")
+
+            with TestClient(
+                create_app(
+                    service,
+                    run_startup_checks=False,
+                    rate_limit_rules={PUBLIC_LATEST_FILE_DOWNLOAD_PATH: (1, 60)},
+                )
+            ) as client:
+                first_response = client.get(PUBLIC_LATEST_FILE_DOWNLOAD_PATH)
+                second_response = client.get(PUBLIC_LATEST_FILE_DOWNLOAD_PATH)
+
+            self.assertEqual(first_response.status_code, 200)
+            self.assertEqual(second_response.status_code, 429)
+            self.assertEqual(second_response.json()["error"]["code"], "rate_limited")
+            self.assertIn("Retry-After", second_response.headers)
+
 
 class PublicApiContractTest(unittest.TestCase):
     def test_health_ready_is_available_without_business_status(self) -> None:
@@ -210,6 +234,25 @@ class PublicApiContractTest(unittest.TestCase):
             self.assertTrue(body["data"]["running"])
             self.assertEqual(body["data"]["last_action"], "downloaded")
             self.assertIn("last_success_at", body["data"])
+
+    def test_public_status_is_rate_limited(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = make_service(Path(temp_dir))
+
+            with TestClient(
+                create_app(
+                    service,
+                    run_startup_checks=False,
+                    rate_limit_rules={PUBLIC_STATUS_PATH: (1, 60)},
+                )
+            ) as client:
+                first_response = client.get(PUBLIC_STATUS_PATH)
+                second_response = client.get(PUBLIC_STATUS_PATH)
+
+            self.assertEqual(first_response.status_code, 200)
+            self.assertEqual(second_response.status_code, 429)
+            self.assertEqual(second_response.json()["error"]["code"], "rate_limited")
+            self.assertIn("Retry-After", second_response.headers)
 
     def test_legacy_aliases_are_removed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

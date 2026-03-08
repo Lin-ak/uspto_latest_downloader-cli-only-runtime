@@ -9,7 +9,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from downloader_common import (
+from core.common import (
     DownloadError,
     PUBLIC_ERROR_MESSAGES,
     RemoteRecord,
@@ -20,7 +20,7 @@ from downloader_common import (
     parse_iso_date,
     parse_release_datetime,
 )
-from logging_utils import log_event
+from core.logging_utils import log_event
 
 try:
     import httpx

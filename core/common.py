@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+from os import PathLike
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -12,7 +13,7 @@ from typing import Any, Dict
 from urllib.parse import urlparse
 
 
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parents[1]
 DOWNLOADS_DIR = ROOT_DIR / "downloads"
 PARTIAL_DIR = DOWNLOADS_DIR / ".partial"
 RUNTIME_DIR = ROOT_DIR / "runtime"
@@ -180,3 +181,42 @@ def error_hint_for_code(code: str | None) -> str | None:
     if not normalized:
         return None
     return ERROR_CODE_HINTS.get(normalized)
+
+
+def _resolve_configured_path(value: str | PathLike[str] | None, *, base_dir: Path) -> Path:
+    text = str(value or "").strip()
+    if not text:
+        return base_dir
+
+    path = Path(text).expanduser()
+    if not path.is_absolute():
+        path = base_dir / path
+    return path.resolve()
+
+
+def resolve_runtime_paths(
+    root_dir_value: str | PathLike[str] | None = None,
+    downloads_dir_value: str | PathLike[str] | None = None,
+    runtime_dir_value: str | PathLike[str] | None = None,
+) -> Dict[str, Path]:
+    root_dir = _resolve_configured_path(root_dir_value, base_dir=ROOT_DIR)
+    downloads_dir = (
+        _resolve_configured_path(downloads_dir_value, base_dir=root_dir)
+        if str(downloads_dir_value or "").strip()
+        else root_dir / "downloads"
+    )
+    runtime_dir = (
+        _resolve_configured_path(runtime_dir_value, base_dir=root_dir)
+        if str(runtime_dir_value or "").strip()
+        else root_dir / "runtime"
+    )
+
+    return {
+        "root_dir": root_dir,
+        "downloads_dir": downloads_dir,
+        "partial_dir": downloads_dir / ".partial",
+        "runtime_dir": runtime_dir,
+        "state_path": runtime_dir / STATE_PATH.name,
+        "db_path": runtime_dir / DB_PATH.name,
+        "lock_path": runtime_dir / ".download.lock",
+    }
