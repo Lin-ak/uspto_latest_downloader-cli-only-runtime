@@ -1,5 +1,11 @@
 # USPTO 最新文件自动下载服务
 
+[![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Playwright](https://img.shields.io/badge/Playwright-Chromium-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
+[![SQLite](https://img.shields.io/badge/SQLite-runtime-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![Mode](https://img.shields.io/badge/Sync-CLI--first-6C5CE7)](./run_download_latest_once.py)
+
 这个目录包含应用代码、运行文档和本地运维文件。
 
 详细接口见 [API.md](./API.md)，运行与维护规范见 [SOP.md](./SOP.md)。
@@ -55,6 +61,70 @@ CLI 同步入口：
 - `python3 run_download_latest_once.py`
 
 常规定时同步请固定使用 CLI 入口，不通过 HTTP 触发。
+
+## 定时同步
+
+推荐把定时同步固定到：
+
+```bash
+./.venv/bin/python run_download_latest_once.py
+```
+
+### cron
+
+示例：每 6 小时同步一次，并把标准输出与错误输出写到日志文件。
+
+```cron
+0 */6 * * * cd /opt/uspto_latest_downloader && /bin/zsh -lc 'set -a; [ -f .env ] && source .env; set +a; ./.venv/bin/python run_download_latest_once.py' >> runtime/cron.log 2>&1
+```
+
+说明：
+
+- 用绝对路径执行，避免 `cron` 下工作目录不确定
+- 如果你不需要 `.env` 里的可选参数，可以去掉 `source .env`
+- 项目内部已经有跨进程锁，不需要额外再套一层 `flock`
+
+### systemd timer
+
+推荐在 Linux 上优先使用 `systemd timer`，更容易观察日志和失败重试。
+
+服务单元示例：
+
+```ini
+[Unit]
+Description=USPTO latest downloader sync job
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/uspto_latest_downloader
+EnvironmentFile=/opt/uspto_latest_downloader/.env
+ExecStart=/opt/uspto_latest_downloader/.venv/bin/python /opt/uspto_latest_downloader/run_download_latest_once.py
+```
+
+定时器单元示例：
+
+```ini
+[Unit]
+Description=Run USPTO latest downloader every 6 hours
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+启用方式：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now uspto-latest-downloader.timer
+sudo systemctl status uspto-latest-downloader.timer
+```
 
 ## 目录
 
