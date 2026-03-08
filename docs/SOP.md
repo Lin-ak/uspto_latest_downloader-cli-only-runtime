@@ -8,19 +8,17 @@
 
 当前项目只保留：
 
-- 公开只读 HTTP 接口
 - CLI 同步入口 `run_download_latest_once.py`
 
-常规定时同步一律通过 CLI 入口执行，不通过 HTTP 触发。
+常规定时同步一律通过 CLI 入口执行。
 
 实现目录按功能分为：
 
-- `app/`：HTTP 应用层
 - `core/`：共享契约、常量、日志
 - `sync/`：同步主链路
 - `storage/`：SQLite 持久化
 
-根目录脚本只保留运行入口；其中 `server.py` 是薄启动包装，`run_download_latest_once.py` 是正式 CLI 入口。
+根目录脚本只保留运行入口；`run_download_latest_once.py` 是正式 CLI 入口。
 
 ## 3. 首次部署
 
@@ -64,13 +62,7 @@ make run
 make test
 ```
 
-## 5. 公开接口
-
-- `GET /health/ready`
-- `GET /api/v1/status`
-- `GET /api/v1/files/latest/download`
-
-## 6. CLI 同步
+## 5. CLI 同步
 
 单次同步入口：
 
@@ -89,14 +81,13 @@ make test
 7. 必要时下载并校验 ZIP
 8. 写回 SQLite 状态、文件历史、任务历史
 
-## 7. 排障
+## 6. 排障
 
 优先检查：
 
-1. `GET /health/ready`
-2. `stderr` 结构化日志
-3. `runtime/app.db`
-4. `downloads/`
+1. `stderr` 结构化日志
+2. `runtime/app.db`
+3. `downloads/`
 
 SQLite 常看表：
 
@@ -105,15 +96,15 @@ SQLite 常看表：
 - `job_runs`
 - `runtime_cache`
 
-## 8. 持久化资产
+## 7. 持久化资产
 
 - `downloads/*.zip`
 - `runtime/app.db`
 
 建议定期备份这两类数据。
 
-## 9. 变更原则
+## 8. 变更原则
 
-- 新公开接口必须补测试
-- 文档变更必须同步 `README.md` 或 `docs/API.md`
+- 新的 CLI 行为变更必须补测试
+- 文档变更必须同步 `README.md` 或 `docs/SOP.md`
 - 不把运行产物提交到源码目录
