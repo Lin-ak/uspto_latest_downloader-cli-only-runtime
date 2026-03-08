@@ -20,7 +20,7 @@
 - `sync/`：同步主链路
 - `storage/`：SQLite 持久化
 
-根目录脚本保留为兼容入口与启动入口。
+根目录脚本只保留运行入口；其中 `server.py` 是薄启动包装，`run_download_latest_once.py` 是正式 CLI 入口。
 
 ## 3. 首次部署
 

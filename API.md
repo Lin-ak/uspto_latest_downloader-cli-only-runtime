@@ -12,7 +12,7 @@ http://127.0.0.1:8010
 - JSON 响应默认带 `Cache-Control: no-store`
 - 运行状态默认保存在 `runtime/app.db`
 - 运行日志使用结构化 JSON logging，输出到 `stderr`
-- 代码实现按功能分包到 `app/`、`core/`、`sync/`、`storage/`，根目录脚本主要保留启动与兼容入口
+- 代码实现按功能分包到 `app/`、`core/`、`sync/`、`storage/`，根目录脚本只保留运行入口
 
 ## 统一返回结构
 

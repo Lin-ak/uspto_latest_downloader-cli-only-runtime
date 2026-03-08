@@ -6,7 +6,7 @@
 [![SQLite](https://img.shields.io/badge/SQLite-runtime-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![Mode](https://img.shields.io/badge/Sync-CLI--first-6C5CE7)](./run_download_latest_once.py)
 
-这个目录包含应用代码、运行文档和本地运维文件。当前实现已经按功能分包，根目录只保留少量兼容入口。
+这个目录包含应用代码、运行文档和本地运维文件。当前实现已经按功能分包，根目录只保留少量运行入口。
 
 详细接口见 [API.md](./API.md)，运行与维护规范见 [SOP.md](./SOP.md)。
 
@@ -146,7 +146,7 @@ sudo systemctl status uspto-latest-downloader.timer
 - `core/`：共享契约、常量与日志工具
 - `sync/`：同步主链路，包括调度、上游访问和 ZIP 处理
 - `storage/`：SQLite 持久化层
-- `server.py`：兼容启动入口，实际应用装配在 `app/factory.py`
+- `server.py`：薄启动包装，实际应用装配在 `app/factory.py`
 - `run_download_latest_once.py`：CLI 同步入口
 - `Makefile`：本地统一运行与校验入口
 - `.env.example`：本地环境变量样例
