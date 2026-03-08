@@ -42,7 +42,7 @@ set +a
 常用入口：
 
 ```bash
-make test
+make pycompile
 make run
 ```
 
@@ -130,7 +130,6 @@ sudo systemctl status uspto-latest-downloader.timer
 - `Makefile`：本地统一运行与校验入口
 - `.env.example`：本地环境变量样例
 - `docs/`：项目运维文档
-- `tests/`：测试目录
 - `downloads/`：保存已下载 ZIP
 - `runtime/app.db`：保存运行状态、下载历史和 `job_runs` 执行记录
 

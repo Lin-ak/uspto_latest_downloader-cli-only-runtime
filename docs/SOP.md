@@ -59,7 +59,7 @@ make run
 校验：
 
 ```bash
-make test
+make pycompile
 ```
 
 ## 5. CLI 同步
@@ -105,6 +105,5 @@ SQLite 常看表：
 
 ## 8. 变更原则
 
-- 新的 CLI 行为变更必须补测试
 - 文档变更必须同步 `README.md` 或 `docs/SOP.md`
 - 不把运行产物提交到源码目录
