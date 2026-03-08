@@ -91,6 +91,7 @@ CLI 同步入口：
 
 说明：
 
+- 把 `/opt/uspto_latest_downloader` 替换成你的实际部署目录
 - 用绝对路径执行，避免 `cron` 下工作目录不确定
 - 如果你不需要 `.env` 里的可选参数，可以去掉 `source .env`
 - 项目内部已经有跨进程锁，不需要额外再套一层 `flock`
@@ -113,6 +114,8 @@ WorkingDirectory=/opt/uspto_latest_downloader
 EnvironmentFile=/opt/uspto_latest_downloader/.env
 ExecStart=/opt/uspto_latest_downloader/.venv/bin/python /opt/uspto_latest_downloader/run_download_latest_once.py
 ```
+
+把 `/opt/uspto_latest_downloader` 替换成你的实际部署目录。
 
 定时器单元示例：
 

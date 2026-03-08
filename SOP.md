@@ -32,6 +32,8 @@ python3 -m venv .venv
 cp .env.example .env
 ```
 
+把 `/opt/uspto_latest_downloader` 替换成你的实际部署目录。
+
 如果要修改下载目录或运行目录，优先改 `.env`：
 
 - `USPTO_ROOT_DIR`
