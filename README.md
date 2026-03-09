@@ -1,17 +1,12 @@
 # USPTO 最新文件自动下载服务
 
-[![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Playwright](https://img.shields.io/badge/Playwright-Chromium-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
-[![SQLite](https://img.shields.io/badge/SQLite-runtime-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![Mode](https://img.shields.io/badge/Sync-CLI--first-6C5CE7)](./run_download_latest_once.py)
+当前目录只保留生产运行所需代码、依赖定义和最小运行说明。正式入口固定为 CLI：
 
-这个目录包含应用代码、运行文档和本地运维文件。当前实现已经按功能分包，根目录只保留少量运行入口。
+```bash
+python3 run_download_latest_once.py
+```
 
-运行与维护规范见 [SOP.md](./docs/SOP.md)。
-
-## 本地运行
-
-准备虚拟环境并安装依赖：
+## 安装
 
 ```bash
 python3 -m venv .venv
@@ -19,7 +14,7 @@ python3 -m venv .venv
 ./.venv/bin/playwright install chromium
 ```
 
-如需调整可选环境变量，可复制样例：
+如需设置可选环境变量：
 
 ```bash
 cp .env.example .env
@@ -28,80 +23,46 @@ source .env
 set +a
 ```
 
-路径相关环境变量：
+## 环境变量
 
 - `USPTO_ROOT_DIR`：统一指定运行根目录；未显式设置下载/运行目录时，默认在该目录下使用 `downloads/` 和 `runtime/`
 - `USPTO_DOWNLOADS_DIR`：单独指定 ZIP 下载目录
 - `USPTO_RUNTIME_DIR`：单独指定 `app.db`、锁文件和运行时缓存目录
+- `USPTO_COOKIE_CACHE_TTL_SECONDS`：默认 `0`，不持久化第三方 cookie；大于 `0` 时才会写入 `runtime/app.db`
+- `USPTO_RETRY_JITTER_RATIO`：重试退避抖动比例
+- `USPTO_FAILURE_COOLDOWN_SECONDS`：连续失败后的冷却秒数；设为 `0` 可关闭
 
 说明：
 
 - 相对路径会以 `USPTO_ROOT_DIR` 为基准；如果未设置 `USPTO_ROOT_DIR`，则以当前项目根目录为基准
-- 如果三个变量都不设置，行为与当前默认值一致
-- `USPTO_COOKIE_CACHE_TTL_SECONDS` 默认值为 `0`，即默认不把第三方 cookie 持久化到 `runtime/app.db`
-- 如果显式设置 `USPTO_COOKIE_CACHE_TTL_SECONDS > 0`，会把 USPTO 会话 cookie 写入 `runtime/app.db`；这种模式只适合单用户、受信任主机
+- 如果三个路径变量都不设置，行为与默认目录一致
+- cookie 持久化模式只适合单用户、受信任主机
 
-常用入口：
+## 运行
+
+单次同步：
 
 ```bash
-make test
-make pycompile
-make run
+./.venv/bin/python run_download_latest_once.py
 ```
 
-## 入口
-
-当前项目只保留 CLI 同步入口：
-
-- `python3 run_download_latest_once.py`
-
-常规定时同步请固定使用 CLI 入口。
-
-## 上线前校验
-
-建议至少执行：
+最小上线校验：
 
 ```bash
-make test
-./.venv/bin/python -c "from playwright.sync_api import sync_playwright; print('playwright-ok')"
+./.venv/bin/python -m py_compile run_download_latest_once.py core/*.py sync/*.py storage/*.py
 ./.venv/bin/playwright install chromium
 ./.venv/bin/python run_download_latest_once.py
 ```
 
-如果需要做依赖漏洞扫描：
-
-```bash
-./.venv/bin/pip-audit -r requirements.txt
-```
-
 ## 定时同步
 
-推荐把定时同步固定到：
-
-```bash
-./.venv/bin/python run_download_latest_once.py
-```
-
-### cron
-
-示例：每 6 小时同步一次，并把标准输出与错误输出写到日志文件。
+`cron` 示例：
 
 ```cron
 0 */6 * * * cd /opt/uspto_latest_downloader && /bin/zsh -lc 'set -a; [ -f .env ] && source .env; set +a; ./.venv/bin/python run_download_latest_once.py' >> runtime/cron.log 2>&1
 ```
 
-说明：
-
-- 把 `/opt/uspto_latest_downloader` 替换成你的实际部署目录
-- 用绝对路径执行，避免 `cron` 下工作目录不确定
-- 如果你不需要 `.env` 里的可选参数，可以去掉 `source .env`
-- 项目内部已经有跨进程锁，不需要额外再套一层 `flock`
-
-### systemd timer
-
-推荐在 Linux 上优先使用 `systemd timer`，更容易观察日志和失败重试。
-
-服务单元示例：
+`systemd` 服务示例：
 
 ```ini
 [Unit]
@@ -116,9 +77,7 @@ EnvironmentFile=/opt/uspto_latest_downloader/.env
 ExecStart=/opt/uspto_latest_downloader/.venv/bin/python /opt/uspto_latest_downloader/run_download_latest_once.py
 ```
 
-把 `/opt/uspto_latest_downloader` 替换成你的实际部署目录。
-
-定时器单元示例：
+`systemd` 定时器示例：
 
 ```ini
 [Unit]
@@ -133,41 +92,25 @@ Persistent=true
 WantedBy=timers.target
 ```
 
-启用方式：
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now uspto-latest-downloader.timer
-sudo systemctl status uspto-latest-downloader.timer
-```
-
 ## 目录
 
 - `core/`：共享契约、常量与日志工具
 - `sync/`：同步主链路，包括调度、上游访问和 ZIP 处理
 - `storage/`：SQLite 持久化层
 - `run_download_latest_once.py`：CLI 同步入口
-- `Makefile`：本地统一运行与校验入口
-- `.env.example`：本地环境变量样例
-- `docs/`：项目运维文档
+- `requirements.txt`：生产依赖
+- `.env.example`：部署环境变量样例
 - `downloads/`：保存已下载 ZIP
-- `runtime/app.db`：保存运行状态、下载历史和 `job_runs` 执行记录
+- `runtime/`：保存数据库、锁文件和运行时缓存
 
-## 运行策略
+## 运行特性
 
 - 下载任务会对浏览器会话、官方元数据和 ZIP 下载做有限次重试与退避
 - 浏览器拿到的上游 cookie 默认不持久化；只有当 `USPTO_COOKIE_CACHE_TTL_SECONDS > 0` 时才会写入 `runtime/app.db`
-- 重试退避默认带随机抖动，避免固定节奏命中风控；抖动比例可用 `USPTO_RETRY_JITTER_RATIO` 调整
-- 连续失败后会进入短期冷却窗口，避免持续撞击 USPTO；冷却秒数可用 `USPTO_FAILURE_COOLDOWN_SECONDS` 调整，设为 `0` 可关闭
+- 重试退避默认带随机抖动，避免固定节奏命中风控
+- 连续失败后会进入短期冷却窗口，避免持续撞击 USPTO
 - 上游 `fileDownloadURI` 会做 `https://data.uspto.gov/...` allowlist 校验
 - 已存在的本地 ZIP 不只检查大小，还会做 ZIP 结构校验
-- 最新文件解析路径只做轻量 ZIP 可读性校验，不再对历史 ZIP 重复全量 `testzip()`
 - 运行日志统一走结构化 JSON logging，输出到 `stderr`
-- CLI 每次执行都会基于 SQLite 和磁盘状态继续同步流程；如有需要，可调用 `repair_download_history_from_disk()` 做历史回补
+- CLI 每次执行都会基于 SQLite 和磁盘状态继续同步流程
 - 运行时会主动把 `runtime/` 收紧到 `0700`，并把 `runtime/app.db`、其 `-wal/-shm` 文件和 `.download.lock` 收紧到 `0600`
-
-## 包结构说明
-
-- 项目内部实现优先从 `core/`、`sync/`、`storage/` 导入
-- 根目录只保留 `run_download_latest_once.py` 这 1 个运行入口
-- 其余实现模块已经收敛到分包目录，不再建议新增根目录级功能文件
